@@ -1,6 +1,6 @@
+import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 import numpy as np
@@ -12,11 +12,18 @@ from CNN import ConvNet
 
 
 def main():
-    num_epochs = 4
+    # config
+    num_epochs = 30
     batch_size = 4
-    learning_rate = 1e-4
+    learning_rate = 1e-3
+    save_model_every = 3 # epoch
+    load_epoch = 81
     device = torch.device("cpu")
-    MODEL_OUTPUT_PATH = "./cnn.pth"
+    train_model = False
+    eval_model = True
+    MODEL_NAME = "cnn"
+    MODEL_OUTPUT_PATH = "cnn_logs"
+    model = ConvNet()
 
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
@@ -40,97 +47,102 @@ def main():
 
     classes = train_data.classes
 
+    if not os.path.exists(MODEL_OUTPUT_PATH):
+        os.mkdir(MODEL_OUTPUT_PATH)
+
     print("loading model...")
-    model = ConvNetVGG16().to(device)
+    # load saved model
+    if load_epoch:
+        model.load_state_dict(torch.load(f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{load_epoch}.pth"))
+    model = model.to(device)
 
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-    print("initialising training...")
+    if train_model:
+        print("initialising training...")
+        # TRAIN MODEL
+        for epoch in range(load_epoch, load_epoch+num_epochs):
+            for i, (images, labels) in enumerate(train_loader):
+                images = images.to(device)
+                labels = labels.to(device)
 
-    # TRAIN MODEL
-    for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            images = images.to(device)
-            labels = labels.to(device)
+                # forward pass
+                outputs = model(images)
+                loss = loss_func(outputs, labels)
 
-            # forward pass
-            outputs = model(images)
-            loss = loss_func(outputs, labels)
+                # back propagation
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            # back propagation
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                if i % 1000 == 0:
+                    print(f"Epoch: {epoch}, Step: {i}, Loss: {loss.item():.4f}")
 
-            if i % 1000 == 0:
-                print(f"Epoch: {epoch}, Step: {i}, Loss: {loss.item():.4f}")
+            if save_model_every and epoch % save_model_every == 0:
+                torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{epoch}.pth")
 
-    print("training complete...")
+        print("training complete...")
+        # save output model
+        torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}.pth")
 
-    # save output model
-    torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
+    if eval_model:
+        # EVALUATE MODEL
+        print("evaluating model...")
+        all_preds = np.array([])
+        all_labels = np.array([])
 
-    # load saved model
-    model = ConvNetVGG16()
-    model.load_state_dict(torch.load(MODEL_OUTPUT_PATH))
+        with torch.no_grad():
+            for i, (images, labels) in enumerate(test_loader):
+                outputs = model(images)
 
-    # EVALUATE MODEL
-    print("evaluating model...")
-    all_preds = np.array([])
-    all_labels = np.array([])
+                _, predictions = torch.max(outputs, 1)
 
-    with torch.no_grad():
-        for i, (images, labels) in enumerate(test_loader):
-            outputs = model(images)
+                all_preds = np.append(all_preds, predictions)
+                all_labels = np.append(all_labels, labels)
 
-            _, predictions = torch.max(outputs, 1)
+        scores_per_class = {}
+        for i, class_ in enumerate(classes):
+            tp = ((all_preds == i) & (all_labels == i)).sum().item()
+            tn = ((all_preds != i) & (all_labels != i)).sum().item()
+            fp = ((all_preds == i) & (all_labels != i)).sum().item()
+            fn = ((all_preds != i) & (all_labels == i)).sum().item()
+            scores_per_class[class_] = {
+                "TP": tp,
+                "TN": tn,
+                "FP": fp,
+                "FN": fn,
+                "Recall": tp / (tp + fn) if tp + fn else 0,
+                "Precision": tp / (tp + fp) if tp + fp else 0,
+                "F1-Score": tp / (tp + 0.5 * (fp + fn)) if tp + 0.5 * (fp + fn) else 0,
+            }
 
-            all_preds = np.append(all_preds, predictions)
-            all_labels = np.append(all_labels, labels)
+        scores_df = pd.DataFrame(scores_per_class).T.reset_index(names="class")
 
-    scores_per_class = {}
-    for i, class_ in enumerate(classes):
-        tp = ((all_preds == i) & (all_labels == i)).sum().item()
-        tn = ((all_preds != i) & (all_labels != i)).sum().item()
-        fp = ((all_preds == i) & (all_labels != i)).sum().item()
-        fn = ((all_preds != i) & (all_labels == i)).sum().item()
-        scores_per_class[class_] = {
-            "TP": tp,
-            "TN": tn,
-            "FP": fp,
-            "FN": fn,
-            "Recall": tp / (tp + fn) if tp + fn else 0,
-            "Precision": tp / (tp + fp) if tp + fp else 0,
-            "F1-Score": tp / (tp + 0.5 * (fp + fn)) if tp + 0.5 * (fp + fn) else 0,
-        }
+        scores_df = pd.concat(
+            [
+                scores_df,
+                pd.DataFrame.from_dict(
+                    {
+                        "class": "Overall",
+                        "TP": scores_df["TP"].sum(),
+                        "TN": scores_df["TN"].sum(),
+                        "FP": scores_df["FP"].sum(),
+                        "FN": scores_df["FN"].sum(),
+                        "Recall": scores_df["Recall"].mean(),
+                        "Precision": scores_df["Precision"].mean(),
+                        "F1-Score": scores_df["F1-Score"].mean(),
+                    },
+                    orient="index",
+                ).T,
+            ]
+        ).reset_index(drop=True)
 
-    scores_df = pd.DataFrame(scores_per_class).T.reset_index(names="class")
+        print("=" * 50)
+        print("Evaluation scores")
+        print("=" * 50)
 
-    scores_df = pd.concat(
-        [
-            scores_df,
-            pd.DataFrame.from_dict(
-                {
-                    "class": "Overall",
-                    "TP": scores_df["TP"].sum(),
-                    "TN": scores_df["TN"].sum(),
-                    "FP": scores_df["FP"].sum(),
-                    "FN": scores_df["FN"].sum(),
-                    "Recall": scores_df["Recall"].mean(),
-                    "Precision": scores_df["Precision"].mean(),
-                    "F1-Score": scores_df["F1-Score"].mean(),
-                },
-                orient="index",
-            ).T,
-        ]
-    ).reset_index(drop=True)
-
-    print("=" * 50)
-    print("Evaluation scores")
-    print("=" * 50)
-
-    pprint(scores_df)
+        pprint(scores_df)
 
 
 if __name__ == "__main__":
