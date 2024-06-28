@@ -3,8 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
+import numpy as np
+import pandas as pd
+from pprint import pprint
 
 from VGG16 import ConvNetVGG16
+from CNN import ConvNet
 
 def main():
     num_epochs = 4
@@ -57,22 +61,63 @@ def main():
     # save output model
     torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
 
-    model = ConvNet()
+    # load saved model
+    model = ConvNetVGG16()
     model.load_state_dict(torch.load(MODEL_OUTPUT_PATH))
 
     # EVALUATE MODEL
-    correct = 0
-    incorrect = 0
+    all_preds = np.array([])
+    all_labels = np.array([])
+
     with torch.no_grad():
         for i, (images, labels) in enumerate(test_loader):
             outputs = model(images)
 
             _, predictions = torch.max(outputs, 1)
 
-            correct += (predictions == labels).sum().item()
-            incorrect += (predictions != labels).sum().item()
+            all_preds = np.append(all_preds, predictions)
+            all_labels = np.append(all_labels, labels)
 
-    print(f"Correct predictions: {correct}, Incorrect predictions: {incorrect}")
+    scores_per_class = {}
+    for i, class_ in enumerate(classes):
+        tp = ((all_preds == i) & (all_labels == i)).sum().item()
+        tn = ((all_preds != i) & (all_labels != i)).sum().item()
+        fp = ((all_preds == i) & (all_labels != i)).sum().item()
+        fn = ((all_preds != i) & (all_labels == i)).sum().item()
+        scores_per_class[class_] = {
+            "TP": tp,
+            "TN": tn,
+            "FP": fp,
+            "FN": fn,
+            "Recall": tp/(tp+fn) if tp+fn else 0,
+            "Precision": tp/(tp+fp) if tp+fp else 0,
+            "F1-Score": tp/(tp+0.5*(fp+fn)) if tp+0.5*(fp+fn) else 0
+        }
+
+    scores_df = pd.DataFrame(scores_per_class).T.reset_index(names="class")
+
+    scores_df = pd.concat([
+        scores_df,
+        pd.DataFrame.from_dict(
+            {
+                "class": "Overall",
+                "TP": scores_df["TP"].sum(),
+                "TN": scores_df["TN"].sum(),
+                "FP": scores_df["FP"].sum(),
+                "FN": scores_df["FN"].sum(),
+                "Recall": scores_df["Recall"].mean(),
+                "Precision": scores_df["Precision"].mean(),
+                "F1-Score": scores_df["F1-Score"].mean()
+            },
+            orient="index"
+        ).T
+    ]).reset_index(drop=True)
+
+    print("="*50)
+    print("Evaluation scores")
+    print("="*50)
+
+    pprint(scores_df)
 
 
 if __name__=="__main__":
