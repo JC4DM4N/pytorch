@@ -10,33 +10,43 @@ from pprint import pprint
 from VGG16 import ConvNetVGG16
 from CNN import ConvNet
 
+
 def main():
     num_epochs = 4
     batch_size = 4
     learning_rate = 1e-4
     device = torch.device("cpu")
-    MODEL_OUTPUT_PATH = './cnn.pth'
+    MODEL_OUTPUT_PATH = "./cnn.pth"
 
     transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-
-        ]
+        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
 
-    train_data = torchvision.datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
-    test_data = torchvision.datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
+    print("loading data...")
 
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=True)
+    train_data = torchvision.datasets.CIFAR10(
+        root="./data", train=True, download=True, transform=transform
+    )
+    test_data = torchvision.datasets.CIFAR10(
+        root="./data", train=False, download=True, transform=transform
+    )
+
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=batch_size, shuffle=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_data, batch_size=batch_size, shuffle=True
+    )
 
     classes = train_data.classes
 
+    print("loading model...")
     model = ConvNetVGG16().to(device)
 
     loss_func = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+
+    print("initialising training...")
 
     # TRAIN MODEL
     for epoch in range(num_epochs):
@@ -56,7 +66,7 @@ def main():
             if i % 1000 == 0:
                 print(f"Epoch: {epoch}, Step: {i}, Loss: {loss.item():.4f}")
 
-    print("Finished")
+    print("training complete...")
 
     # save output model
     torch.save(model.state_dict(), MODEL_OUTPUT_PATH)
@@ -66,6 +76,7 @@ def main():
     model.load_state_dict(torch.load(MODEL_OUTPUT_PATH))
 
     # EVALUATE MODEL
+    print("evaluating model...")
     all_preds = np.array([])
     all_labels = np.array([])
 
@@ -89,36 +100,38 @@ def main():
             "TN": tn,
             "FP": fp,
             "FN": fn,
-            "Recall": tp/(tp+fn) if tp+fn else 0,
-            "Precision": tp/(tp+fp) if tp+fp else 0,
-            "F1-Score": tp/(tp+0.5*(fp+fn)) if tp+0.5*(fp+fn) else 0
+            "Recall": tp / (tp + fn) if tp + fn else 0,
+            "Precision": tp / (tp + fp) if tp + fp else 0,
+            "F1-Score": tp / (tp + 0.5 * (fp + fn)) if tp + 0.5 * (fp + fn) else 0,
         }
 
     scores_df = pd.DataFrame(scores_per_class).T.reset_index(names="class")
 
-    scores_df = pd.concat([
-        scores_df,
-        pd.DataFrame.from_dict(
-            {
-                "class": "Overall",
-                "TP": scores_df["TP"].sum(),
-                "TN": scores_df["TN"].sum(),
-                "FP": scores_df["FP"].sum(),
-                "FN": scores_df["FN"].sum(),
-                "Recall": scores_df["Recall"].mean(),
-                "Precision": scores_df["Precision"].mean(),
-                "F1-Score": scores_df["F1-Score"].mean()
-            },
-            orient="index"
-        ).T
-    ]).reset_index(drop=True)
+    scores_df = pd.concat(
+        [
+            scores_df,
+            pd.DataFrame.from_dict(
+                {
+                    "class": "Overall",
+                    "TP": scores_df["TP"].sum(),
+                    "TN": scores_df["TN"].sum(),
+                    "FP": scores_df["FP"].sum(),
+                    "FN": scores_df["FN"].sum(),
+                    "Recall": scores_df["Recall"].mean(),
+                    "Precision": scores_df["Precision"].mean(),
+                    "F1-Score": scores_df["F1-Score"].mean(),
+                },
+                orient="index",
+            ).T,
+        ]
+    ).reset_index(drop=True)
 
-    print("="*50)
+    print("=" * 50)
     print("Evaluation scores")
-    print("="*50)
+    print("=" * 50)
 
     pprint(scores_df)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
