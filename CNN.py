@@ -14,12 +14,12 @@ class ConvNet(nn.Module):
         self.fc3 = nn.Linear(in_features=84, out_features=10)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))  # output-size 6 x 28 x 28
-        x = self.pool(x)  # output-size 6 x 14 x 14
-        x = F.relu(self.conv2(x))  # output-size 16 x 10 x 10
-        x = self.pool(x)  # output-size 16 x 5 x 5
+        x = F.relu(self.conv1(x))   # output-size 6 x 28 x 28
+        x = self.pool(x)            # output-size 6 x 14 x 14
+        x = F.relu(self.conv2(x))   # output-size 16 x 10 x 10
+        x = self.pool(x)            # output-size 16 x 5 x 5
         x = x.view(-1, 16 * 5 * 5)  # output-size 1 x 400
-        x = F.relu(self.fc1(x))  # output-size 1 x 120
-        x = F.relu(self.fc2(x))  # output-size 1 x 84
-        x = self.fc3(x)  # output-size 1 x 10
+        x = F.relu(self.fc1(x))     # output-size 1 x 120
+        x = F.relu(self.fc2(x))     # output-size 1 x 84
+        x = self.fc3(x)             # output-size 1 x 10
         return x
