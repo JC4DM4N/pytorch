@@ -12,18 +12,18 @@ from CNN import ConvNet
 
 
 def main():
-    # config
-    num_epochs = 30
-    batch_size = 4
-    learning_rate = 1e-3
-    save_model_every = 3 # epochs
-    load_epoch = 0
+    # CONFIG
+    MODEL_NAME = "cnn"              # prefix for model files
+    MODEL_OUTPUT_PATH = "cnn_logs"  # path of directory to save model files
+    num_epochs = 30                 # training epochs
+    batch_size = 4                  # batch size
+    learning_rate = 1e-3            # learning rate
+    save_model_every = 3            # no. epochs to save model weights file
+    load_epoch = 0                  # file index to load
     device = torch.device("cpu")
-    train_model = True
-    eval_model = True
-    MODEL_NAME = "cnn"
-    MODEL_OUTPUT_PATH = "cnn_logs"
-    model = ConvNet()
+    train_model = True              # boolean to perform training
+    eval_model = True               # boolean to perform evaluation
+    model = ConvNet()               # model class to use
 
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
