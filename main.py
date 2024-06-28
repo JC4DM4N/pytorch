@@ -16,10 +16,10 @@ def main():
     num_epochs = 30
     batch_size = 4
     learning_rate = 1e-3
-    save_model_every = 3 # epoch
-    load_epoch = 81
+    save_model_every = 3 # epochs
+    load_epoch = 0
     device = torch.device("cpu")
-    train_model = False
+    train_model = True
     eval_model = True
     MODEL_NAME = "cnn"
     MODEL_OUTPUT_PATH = "cnn_logs"
