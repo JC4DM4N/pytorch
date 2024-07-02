@@ -42,7 +42,6 @@ class MultiHeadedAttention(nn.Module):
 
         self.d_k = embed_dim // heads               # single head dimension
         self.heads = heads
-        self.dropout = nn.Dropout(dropout)
 
         self.query = nn.Linear(embed_dim, embed_dim)  # query vector - bias addition included
         self.key = nn.Linear(embed_dim, embed_dim)    # key vector - bias addition included
@@ -75,10 +74,8 @@ class MultiHeadedAttention(nn.Module):
         value = value.permute(batch_size, self.heads, max_len, self.d_k)
 
         # calculate self-attention
-        attention_scores = self.dropout(
-            F.softmax(
-                torch.matmul(query, key.permute(0, 1, 3, 2))/math.sqrt(self.d_k)
-            )
+        attention_scores = F.softmax(
+            torch.matmul(query, key.permute(0, 1, 3, 2))/math.sqrt(self.d_k)
         )                                                   # (batch_size, heads, max_len, max_len)
         context = torch.matmul(attention_scores, value)     # (batch_size, heads, max_len, d_k)
 
