@@ -120,7 +120,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.embedding = Embedding(vocab_size, embed_dim)
         self.positional_encoding = PositionalEncoding(embed_dim, max_len)
-        self.layers = [TransformerBlock(embed_dim, heads) for _ in range(num_layers)]
+        self.layers = nn.ModuleList([TransformerBlock(embed_dim, heads) for _ in range(num_layers)])
 
     def forward(self, x):
         x = self.embedding(x) + self.positional_encoding(x)
@@ -135,3 +135,18 @@ class Decoder:
 
     def forward(self):
         pass
+
+
+if __name__ == "__main__":
+
+    def _print_model_layers():
+        model = Encoder(
+            vocab_size=100,
+            embed_dim=512,
+            max_len=128,
+            num_layers=12,
+            heads=3
+        )
+        print(model)
+
+    _print_model_layers()
