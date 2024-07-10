@@ -145,12 +145,30 @@ class DecoderBlock(nn.Module):
         return out
 
 
-class Decoder:
-    def __init__(self):
-        pass
+class Decoder(nn.Module):
+    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int):
+        super(Decoder, self).__init__()
+        self.embedding = Embedding(vocab_size, embed_dim)
+        self.positional_encoding = PositionalEncoding(embed_dim, max_len)
+        self.layers = nn.ModuleList(
+            [
+                DecoderBlock(heads, embed_dim)
+                for _ in range(num_layers)
+            ]
+        )
+        self.transformer_block = TransformerBlock(embed_dim, heads)
+        self.fc = nn.Linear(embed_dim, output_dim)
+        self.dropout = nn.Dropout(0.2)
+        self.softmax = F.softmax()
 
-    def forward(self):
-        pass
+    def forward(self, x):
+        x = self.embedding(x) + self.positional_encoding(x)
+        x = self.dropout(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.transformer_block(x)
+        x = self.softmax(self.fc(x))
+        return x
 
 
 if __name__ == "__main__":
