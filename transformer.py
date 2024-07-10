@@ -50,19 +50,19 @@ class MultiHeadedAttention(nn.Module):
 
         self.out = nn.Linear(self.d_k*self.heads, self.d_k)
 
-    def forward(self, x):
+    def forward(self, query, key, value):
         """
         :param x: embedding matrix of shape (batch_size, max_len, embed_dim)
         :return:
         """
-        batch_size = x.shape[0]
-        max_len = x.shape[1]
-        embed_dim = x.shape[2]
+        batch_size = query.shape[0]
+        max_len = query.shape[1]
+        embed_dim = query.shape[2]
 
         # project x into query, key and value vectors
-        query = self.query(x)       # (batch_size, max_len, embed_dim)
-        key = self.key(x)           # (batch_size, max_len, embed_dim)
-        value = self.value(x)       # (batch_size, max_len, embed_dim)
+        query = self.query(query)       # (batch_size, max_len, embed_dim)
+        key = self.key(key)             # (batch_size, max_len, embed_dim)
+        value = self.value(value)       # (batch_size, max_len, embed_dim)
 
         # reshape vectors to shape (batch_size, max_len, heads, d_k)
         query = query.view(batch_size, max_len, self.heads, self.d_k)
@@ -102,7 +102,7 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x):
         # multi-head layer
-        attention_out = self.multi_head(x)
+        attention_out = self.multi_head(x, x, x)
         dropout1_out = self.dropout1(attention_out)
         attention_out_residual = dropout1_out + x  # residual connection for first layer
         norm1_out = self.norm1(attention_out_residual)
@@ -125,7 +125,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         x = self.embedding(x) + self.positional_encoding(x)
         for layer in self.layers:
-            x = layer(x)
+            x = layer(x, x, x)
         return x
 
 
@@ -134,14 +134,16 @@ class DecoderBlock(nn.Module):
         super(DecoderBlock, self).__init__()
         self.multi_head = MultiHeadedAttention(heads, embed_dim)
         self.norm1 = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(0.2)
         self.transformer_block = TransformerBlock(embed_dim, heads)
 
-    def forward(self, x):
-        attention_out = self.multi_head(x)
+    def forward(self, query, key, value):
+        attention_out = self.multi_head(query, key, value)
         attention_norm = self.norm1(attention_out)
-        attention_norm_residual = attention_norm + x
-        out = self.transformer_block(attention_norm_residual)
+        query = self.dropout(attention_norm + query)
+        out = self.transformer_block(query, key, value)
         return out
+
 
 class Decoder:
     def __init__(self):
