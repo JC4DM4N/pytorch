@@ -129,6 +129,20 @@ class Encoder(nn.Module):
         return x
 
 
+class DecoderBlock(nn.Module):
+    def __init__(self, heads: int, embed_dim: int):
+        super(DecoderBlock, self).__init__()
+        self.multi_head = MultiHeadedAttention(heads, embed_dim)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.transformer_block = TransformerBlock(embed_dim, heads)
+
+    def forward(self, x):
+        attention_out = self.multi_head(x)
+        attention_norm = self.norm1(attention_out)
+        attention_norm_residual = attention_norm + x
+        out = self.transformer_block(attention_norm_residual)
+        return out
+
 class Decoder:
     def __init__(self):
         pass
@@ -149,4 +163,5 @@ if __name__ == "__main__":
         )
         print(model)
 
+    # bert_model = torch.hub.load("huggingface/pytorch-transformers", "model", "bert-base-uncased")
     _print_model_layers()
