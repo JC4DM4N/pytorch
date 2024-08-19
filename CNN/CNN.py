@@ -23,3 +23,12 @@ class ConvNet(nn.Module):
         x = F.relu(self.fc2(x))     # output-size 1 x 84
         x = self.fc3(x)             # output-size 1 x 10
         return x
+
+
+if __name__ == "__main__":
+
+    def _print_model_layers():
+        model = ConvNet()
+        print(model)
+
+    _print_model_layers()

@@ -78,3 +78,12 @@ class ConvNetVGG16(nn.Module):
         x = F.relu(self.fc3(x))     # output-size = 1 x 10
         x = F.softmax(x)
         return x
+
+
+if __name__ == "__main__":
+
+    def _print_model_layers():
+        model = ConvNetVGG16()
+        print(model)
+
+    _print_model_layers()
