@@ -5,13 +5,14 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import pandas as pd
+import argparse
 from pprint import pprint
 
-from VGG16 import ConvNetVGG16
 from CNN import ConvNet
+from VGG16 import ConvNetVGG16
 
 
-def main():
+def main(model: nn.Module):
     # CONFIG
     MODEL_NAME = "cnn"              # prefix for model files
     MODEL_OUTPUT_PATH = "cnn_logs"  # path of directory to save model files
@@ -23,7 +24,7 @@ def main():
     device = torch.device("cpu")
     train_model = True              # boolean to perform training
     eval_model = True               # boolean to perform evaluation
-    model = ConvNet()               # model class to use
+    model = model                   # model class to use
 
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
@@ -146,4 +147,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", choices=["CNN", "VGG16"], default="CNN")
+    args = parser.parse_args()
+
+    if args.model == "CNN":
+        model = ConvNet()
+    elif args.model == "VGG16":
+        model = ConvNetVGG16()
+
+    main(model=model)
