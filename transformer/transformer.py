@@ -171,6 +171,13 @@ class Decoder(nn.Module):
         return x
 
 
+class Transformer(nn.Module):
+    def __init__(self):
+        pass
+
+    def forward(self):
+        pass
+
 if __name__ == "__main__":
 
     def _print_model_layers():
