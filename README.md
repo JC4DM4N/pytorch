@@ -10,7 +10,7 @@ Install the necessary python libraries:
 pip install -r requirements.txt
 ```
 
-Train and evaluate a simple CNN model on a test dataset:
+Train and evaluate a simple CNN model on a pre-configured dataset:
 
 ```
 python CNN/main.py
