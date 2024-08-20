@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 import math
 
 
@@ -73,9 +73,9 @@ class MultiHeadedAttention(nn.Module):
         value = value.view(batch_size, max_len, self.heads, self.d_k)
 
         # then to (batch_size, heads, max_len, d_k)
-        query = query.permute(batch_size, self.heads, max_len, self.d_k)
-        key = key.permute(batch_size, self.heads, max_len, self.d_k)
-        value = value.permute(batch_size, self.heads, max_len, self.d_k)
+        query = query.permute(0, 2, 1, 3)
+        key = key.permute(0, 2, 1, 3)
+        value = value.permute(0, 2, 1, 3)
 
         # calculate self-attention (batch_size, heads, max_len, max_len)
         attention_scores = torch.matmul(query, key.permute(0, 1, 3, 2))/math.sqrt(self.d_k)
@@ -117,7 +117,7 @@ class TransformerBlock(nn.Module):
         attention_out_residual = dropout1_out + query  # residual connection for first layer
         norm1_out = self.norm1(attention_out_residual)
         # fc layers
-        fc1_out = self.dropout(F.Relu(self.fc1(norm1_out)))
+        fc1_out = self.dropout2(F.relu(self.fc1(norm1_out)))
         fc2_out = self.fc2(fc1_out)
         fc_out_redidual = fc2_out + norm1_out  # residual connection for second layer
         out = self.norm2(fc_out_redidual)
