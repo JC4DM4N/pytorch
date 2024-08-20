@@ -179,11 +179,11 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int):
+    def __init__(self, src_vocab_size: int, tgt_vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int):
         super(Transformer, self).__init__()
 
-        self.encoder = Encoder(vocab_size, embed_dim, max_len, num_layers, heads)
-        self.decoder = Decoder(vocab_size, embed_dim, max_len, num_layers, heads, output_dim)
+        self.encoder = Encoder(src_vocab_size, embed_dim, max_len, num_layers, heads)
+        self.decoder = Decoder(tgt_vocab_size, embed_dim, max_len, num_layers, heads, output_dim)
 
     def make_tgt_mask(self, tgt: torch.Tensor):
         """
@@ -227,7 +227,8 @@ if __name__ == "__main__":
 
     def _print_model_layers():
         model = Transformer(
-            vocab_size=100,
+            src_vocab_size=100,
+            tgt_vocab_size=100,
             embed_dim=512,
             max_len=128,
             num_layers=12,
