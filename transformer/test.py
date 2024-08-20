@@ -17,7 +17,7 @@ embed_dim = 512
 max_len = 128
 num_layers = 2
 heads = 2
-output_dim = 10
+output_dim = len(vocab)
 print("-"*50)
 print("Model Configuration:")
 print(f"src_vocab_size: {src_vocab_size}")
@@ -40,9 +40,9 @@ embedded_tokens = embedding(tokens)
 print(f"Embedding shape: {embedded_tokens.shape}")
 print(embedded_tokens)
 
+# test encoder class
 print("-"*50)
 print("testing Encoder class...")
-# test encoder
 encoder = Encoder(
     vocab_size=src_vocab_size,
     embed_dim=embed_dim,
@@ -54,6 +54,7 @@ encoded_text = encoder(tokens)
 print(f"Encoding shape: {encoded_text.shape}")
 print(encoded_text)
 
+# test decoder class
 print("-"*50)
 print("testing Decoder class...")
 decoder = Decoder(
@@ -68,7 +69,7 @@ decoded_output = decoder(tokens, encoded_text)
 print(f"Decoded output shape: {decoded_output.shape}")
 print(decoded_output)
 
-
+# test full transformer implementation
 print("-"*50)
 print("testing full Transformer class...")
 model = Transformer(
@@ -80,7 +81,21 @@ model = Transformer(
     heads=heads,
     output_dim=output_dim
 )
-
 output_scores = model(tokens, tokens)
 print(f"Output shape: {output_scores.shape}")
 print(output_scores)
+
+# generate some next-token predictions with the randomly initialised implementation
+print("-"*50)
+print("Predictions with randomly initialised weights... \n")
+scores = output_scores[0]
+tokens = tokens[0]
+# randomly select some tokens to use for prediction
+for itoken in [10, 20, 50]:
+    print(
+        f"Context tokens: {tokeniser.idx_to_tokens(tokens[:itoken])}"
+    )
+    next_predicted_token_idx = int(scores[itoken].argmax())
+    print(
+        f"Next predicted token: {tokeniser.idx_to_tokens([next_predicted_token_idx])} \n"
+    )

@@ -85,7 +85,7 @@ class MultiHeadedAttention(nn.Module):
             attention_scores = attention_scores.masked_fill(mask == 0, float("-1e20"))
 
         # apply softmax
-        attention_scores = F.softmax(attention_scores)
+        attention_scores = F.softmax(attention_scores, dim=-1)
 
         # multiply by value to get context (batch_size, heads, max_len, d_k)
         context = torch.matmul(attention_scores, value)
@@ -174,7 +174,7 @@ class Decoder(nn.Module):
         x = self.dropout(x)
         for layer in self.layers:
             x = layer(x, enc_out, enc_out, mask)
-        x = F.softmax(self.fc(x))
+        x = F.softmax(self.fc(x), dim=-1)  # apply softmax to the vocab_size dimension
         return x
 
 
