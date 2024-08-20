@@ -40,7 +40,7 @@ class PositionalEncoding(nn.Module):
 class MultiHeadedAttention(nn.Module):
     def __init__(self, heads: int = 8, embed_dim: int = 512):
         super(MultiHeadedAttention, self).__init__()
-
+        assert embed_dim % heads == 0, "Embedding size must be divisible by number of heads"
         self.d_k = embed_dim // heads               # single head dimension
         self.heads = heads
 
@@ -48,7 +48,7 @@ class MultiHeadedAttention(nn.Module):
         self.key = nn.Linear(embed_dim, embed_dim)    # key vector - bias addition included
         self.value = nn.Linear(embed_dim, embed_dim)  # value vector - bias addition included
 
-        self.out = nn.Linear(self.d_k*self.heads, self.d_k)
+        self.out = nn.Linear(self.d_k*self.heads, embed_dim)
 
     def forward(self, query, key, value, mask=None):
         """
@@ -168,14 +168,13 @@ class Decoder(nn.Module):
         )
         self.fc = nn.Linear(embed_dim, output_dim)
         self.dropout = nn.Dropout(0.2)
-        self.softmax = F.softmax()
 
     def forward(self, x, enc_out, mask=None):
         x = self.embedding(x) + self.positional_encoding(x)
         x = self.dropout(x)
         for layer in self.layers:
             x = layer(x, enc_out, enc_out, mask)
-        x = self.softmax(self.fc(x))
+        x = F.softmax(self.fc(x))
         return x
 
 
@@ -227,12 +226,20 @@ class Transformer(nn.Module):
 if __name__ == "__main__":
 
     def _print_model_layers():
-        model = Encoder(
+        # model = Encoder(
+        #     vocab_size=100,
+        #     embed_dim=512,
+        #     max_len=128,
+        #     num_layers=12,
+        #     heads=4
+        # )
+        model = Transformer(
             vocab_size=100,
             embed_dim=512,
             max_len=128,
             num_layers=12,
-            heads=3
+            heads=4,
+            output_dim=128
         )
         print(model)
 
