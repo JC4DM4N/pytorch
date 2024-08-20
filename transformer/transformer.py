@@ -203,9 +203,6 @@ class Transformer(nn.Module):
         )
         return tgt_mask
 
-    def decode(self, tgt: torch.Tensor, enc_out: torch.Tensor, tgt_mask: torch.Tensor):
-        return self.decoder(tgt, enc_out, tgt_mask)
-
     def forward(self, src: torch.Tensor, tgt: torch.Tensor):
         """
         Forward pass of the Transformer model.
@@ -219,7 +216,7 @@ class Transformer(nn.Module):
         """
         enc_output = self.encoder(src)
         tgt_mask = self.make_tgt_mask(tgt)
-        out = self.decode(tgt, enc_output, tgt_mask)
+        out = self.decoder(tgt, enc_output, tgt_mask)
         return out
 
 
