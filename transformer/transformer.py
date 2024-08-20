@@ -226,13 +226,6 @@ class Transformer(nn.Module):
 if __name__ == "__main__":
 
     def _print_model_layers():
-        # model = Encoder(
-        #     vocab_size=100,
-        #     embed_dim=512,
-        #     max_len=128,
-        #     num_layers=12,
-        #     heads=4
-        # )
         model = Transformer(
             vocab_size=100,
             embed_dim=512,
@@ -243,5 +236,4 @@ if __name__ == "__main__":
         )
         print(model)
 
-    # bert_model = torch.hub.load("huggingface/pytorch-transformers", "model", "bert-base-uncased")
     _print_model_layers()
