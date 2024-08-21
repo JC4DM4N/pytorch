@@ -3,6 +3,7 @@ import torch
 import re
 import numpy as np
 
+
 class SimpleTokeniser:
     def __init__(self, max_len: int, xs: List[str]):
         self.max_len = max_len
@@ -40,7 +41,7 @@ class SimpleTokeniser:
         return np.array(tokens)
 
     def tokens_to_idx(self, tokens: List[str]) -> List[int]:
-        return [np.where(self.vocab == token) for token in tokens]
+        return [np.where(self.vocab == token)[0][0] for token in tokens]
 
     def idx_to_tokens(self, itokens: List[int]) -> List[str]:
         return [self.vocab[itoken] for itoken in itokens]
