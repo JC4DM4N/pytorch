@@ -37,9 +37,9 @@ def main():
     # CONFIG - training
     MODEL_NAME = "bert_classifier"          # prefix for model files
     MODEL_OUTPUT_PATH = "bert_classifier"   # path of directory to save model files
-    num_epochs = 100                        # training epochs
-    batch_size = 32                         # batch size
-    learning_rate = 1e-3                    # learning rate
+    num_epochs = 50                        # training epochs
+    batch_size = 64                         # batch size
+    learning_rate = 1e-4                    # learning rate
     save_model_every = 10                   # no. epochs to save model weights file
     load_epoch = 0                          # file index to load
     device = torch.device("cpu")
@@ -83,19 +83,13 @@ def main():
 
     print("-"*50)
     print("tokenising texts...")
-    import time
-
-    tstart = time.time()
     train_tokens = train_df["text"].apply(tokeniser)
     train_x = torch.stack(train_tokens.to_list())
     train_y = torch.tensor(train_df["label"].astype(float).to_list()).view(train_df.shape[0], 1)
-    print(f"time to tokenise train data: {time.time() - tstart}")
 
-    tstart = time.time()
     test_tokens = test_df["text"].apply(tokeniser)
     test_x = torch.stack(test_tokens.to_list())
     test_y = torch.tensor(test_df["label"].astype(float).to_list()).view(test_df.shape[0], 1)
-    print(f"time to tokenise test data: {time.time() - tstart}")
 
     if not os.path.exists(MODEL_OUTPUT_PATH):
         os.mkdir(MODEL_OUTPUT_PATH)
@@ -131,9 +125,9 @@ def main():
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         for epoch in range(num_epochs):
             for x, y in batch_data(train_x, train_y, batch_size):
-                optimizer.zero_grad()
                 preds = model(x)
                 loss = loss_func(preds, y)
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
