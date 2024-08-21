@@ -4,7 +4,7 @@ import re
 
 
 class SimpleTokeniser:
-    def __init__(self, max_len: int, vocab: List):
+    def __init__(self, max_len: int, vocab: List[str]):
         self.max_len = max_len
         self.vocab = vocab
 
@@ -24,7 +24,7 @@ class SimpleTokeniser:
         itokens = self.tokens_to_idx(tokens)
         return torch.tensor(itokens)
 
-    def get_vocab(self, xs: List):
+    def get_vocab(self, xs: List[str]):
         special_chars = ["[CLS]", "[SEP]", "[UNK]"]
         all_tokens = []
         for x in xs:
@@ -40,8 +40,8 @@ class SimpleTokeniser:
         tokens = [token.lower() for token in tokens]
         return tokens
 
-    def tokens_to_idx(self, tokens: List):
+    def tokens_to_idx(self, tokens: List[str]):
         return [self.vocab.index(token) for token in tokens]
 
-    def idx_to_tokens(self, itokens: List):
+    def idx_to_tokens(self, itokens: List[int]):
         return [self.vocab[itoken] for itoken in itokens]
