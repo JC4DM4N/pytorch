@@ -6,17 +6,20 @@ from tokenisers import SimpleTokeniser
 # load dataset from datasets
 data = load_dataset("stanfordnlp/imdb")
 
-# select sample of texts
-texts = [item["text"] for item in data["train"].to_list()[0: 10]]
-vocab = SimpleTokeniser(0, []).get_vocab(xs=texts)
-
 # configuration parameters for transformer model
-src_vocab_size = len(vocab)
-tgt_vocab_size = len(vocab)
 embed_dim = 512
 max_len = 128
 num_layers = 2
 heads = 2
+
+# select sample of texts
+texts = [item["text"] for item in data["train"].to_list()[0: 10]]
+tokeniser = SimpleTokeniser(max_len, xs=texts)
+vocab = tokeniser.vocab
+
+# configuration parameters for transformer model
+src_vocab_size = len(vocab)
+tgt_vocab_size = len(vocab)
 output_dim = len(vocab)
 print("-"*50)
 print("Model Configuration:")
@@ -29,7 +32,6 @@ print(f"heads: {heads}")
 print(f"output_dim: {output_dim}")
 
 # tokenise example text
-tokeniser = SimpleTokeniser(max_len, vocab)
 tokens = tokeniser(texts[0]).view(1, max_len)
 
 # test generate embeddings
