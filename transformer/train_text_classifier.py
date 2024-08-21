@@ -38,7 +38,7 @@ def main():
     MODEL_NAME = "bert_classifier"          # prefix for model files
     MODEL_OUTPUT_PATH = "bert_classifier"   # path of directory to save model files
     num_epochs = 100                        # training epochs
-    # batch_size = 4                          # batch size
+    batch_size = 32                         # batch size
     learning_rate = 1e-3                    # learning rate
     save_model_every = 10                   # no. epochs to save model weights file
     load_epoch = 0                          # file index to load
@@ -49,16 +49,16 @@ def main():
     # CONFIG - parameters for transformer model
     embed_dim = 256
     max_len = 128
-    num_layers = 2
-    heads = 2
+    num_layers = 1
+    heads = 1
     output_dim = 1
     threshold = 0.5                         # probability threshold for assigning labels
 
     # load dataset from datasets and take a sample
     data = load_dataset("stanfordnlp/imdb")
 
-    train_df = pd.DataFrame(data["train"]).sample(1000, random_state=1)
-    test_df = pd.DataFrame(data["test"]).sample(1000, random_state=1)
+    train_df = pd.DataFrame(data["train"]).sample(5000, random_state=1)
+    test_df = pd.DataFrame(data["test"]).sample(5000, random_state=1)
 
     # train tokeniser using vocabulary in the train set only
     tokeniser = SimpleTokeniser(max_len, train_df["text"])
@@ -66,7 +66,7 @@ def main():
     vocab = tokeniser.vocab
     vocab_size = len(vocab)
     print("-"*50)
-    print("Model Configuration:")
+    print("Model Configuration: \n")
     print(f"vocab_size: {vocab_size}")
     print(f"embed_dim: {embed_dim}")
     print(f"max_len: {max_len}")
@@ -74,13 +74,28 @@ def main():
     print(f"heads: {heads}")
     print(f"output_dim: {output_dim}")
 
+    print("-"*50)
+    print("Training Configuration: \n")
+    print(f"model_name: {MODEL_NAME}")
+    print(f"learning_rate: {learning_rate}")
+    print(f"num_epochs: {num_epochs}")
+    print(f"batch_size: {batch_size}")
+
+    print("-"*50)
+    print("tokenising texts...")
+    import time
+
+    tstart = time.time()
     train_tokens = train_df["text"].apply(tokeniser)
     train_x = torch.stack(train_tokens.to_list())
     train_y = torch.tensor(train_df["label"].astype(float).to_list()).view(train_df.shape[0], 1)
+    print(f"time to tokenise train data: {time.time() - tstart}")
 
+    tstart = time.time()
     test_tokens = test_df["text"].apply(tokeniser)
     test_x = torch.stack(test_tokens.to_list())
     test_y = torch.tensor(test_df["label"].astype(float).to_list()).view(test_df.shape[0], 1)
+    print(f"time to tokenise test data: {time.time() - tstart}")
 
     if not os.path.exists(MODEL_OUTPUT_PATH):
         os.mkdir(MODEL_OUTPUT_PATH)
@@ -103,17 +118,25 @@ def main():
         model.load_state_dict(torch.load(f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{load_epoch}.pth"))
     model = model.to(device)
 
+    def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
+        """Yield successive n-sized chunks from lst."""
+        assert x.shape[0] == y.shape[0]
+        for i in range(0, len(x), batch_size):
+            yield x[i:i + batch_size], y[i:i + batch_size]
+
     if train_model:
         print("-"*50)
         print("training classifier...")
         loss_func = nn.BCELoss()  # binary cross-entropy loss
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         for epoch in range(num_epochs):
-            optimizer.zero_grad()
-            preds = model(train_x)
-            loss = loss_func(preds, train_y)
-            loss.backward()
-            optimizer.step()
+            for x, y in batch_data(train_x, train_y, batch_size):
+                optimizer.zero_grad()
+                preds = model(x)
+                loss = loss_func(preds, y)
+                loss.backward()
+                optimizer.step()
+
             print(f"Epoch: {epoch+1}, Loss: {loss.item()}")
 
             if save_model_every and epoch % save_model_every == 0:
