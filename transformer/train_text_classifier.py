@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from datasets import load_dataset
 import pandas as pd
 from pprint import pprint
+from typing import Generator
+import matplotlib.pyplot as plt
 
 from transformer import Encoder
 from tokenisers import SimpleTokeniser
@@ -42,11 +44,13 @@ def main():
     batch_size = 64                         # batch size
     learning_rate = 1e-4                    # learning rate
     save_model_every = 10                   # no. epochs to save model weights file
-    load_epoch = 0                          # file index to load
+    load_epoch = 40                          # file index to load
     device = torch.device("cpu")
-    train_model = True                      # boolean to perform training
+    train_model = False                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
     eval_during_training = True             # whether to calculate and save eval metrics at each epoch
+    train_size = 1000                       # sample size of training data to use
+    test_size = 1000                        # sample size of test data to use
 
     # CONFIG - parameters for transformer model
     embed_dim = 256
@@ -59,8 +63,8 @@ def main():
     # load dataset from datasets and take a sample
     data = load_dataset("stanfordnlp/imdb")
 
-    train_df = pd.DataFrame(data["train"]).sample(5000, random_state=1)
-    test_df = pd.DataFrame(data["test"]).sample(5000, random_state=1)
+    train_df = pd.DataFrame(data["train"]).sample(train_size, random_state=1)
+    test_df = pd.DataFrame(data["test"]).sample(test_size, random_state=1)
 
     # train tokeniser using vocabulary in the train set only
     tokeniser = SimpleTokeniser(max_len, train_df["text"])
@@ -83,6 +87,7 @@ def main():
     print(f"num_epochs: {num_epochs}")
     print(f"batch_size: {batch_size}")
 
+    # tokenise texts
     print("-"*50)
     print("tokenising texts...")
     train_tokens = train_df["text"].apply(tokeniser)
@@ -93,10 +98,16 @@ def main():
     test_x = torch.stack(test_tokens.to_list())
     test_y = torch.tensor(test_df["label"].astype(float).to_list()).view(test_df.shape[0], 1)
 
+    def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
+        """Yield successive n-sized chunks from lst."""
+        assert x.shape[0] == y.shape[0]
+        for i in range(0, len(x), batch_size):
+            yield x[i:i + batch_size], y[i:i + batch_size]
+
     if not os.path.exists(MODEL_OUTPUT_PATH):
         os.mkdir(MODEL_OUTPUT_PATH)
 
-    # # test encoder class
+    # initialise models
     print("-"*50)
     print("initialising classifier...")
     model = BERTClassifier(
@@ -107,33 +118,34 @@ def main():
         heads=heads,
         num_classes=output_dim
     )
-
     # load saved model
     if load_epoch:
         print("loading model weights...")
         model.load_state_dict(torch.load(f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{load_epoch}.pth"))
     model = model.to(device)
 
-    def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
-        """Yield successive n-sized chunks from lst."""
-        assert x.shape[0] == y.shape[0]
-        for i in range(0, len(x), batch_size):
-            yield x[i:i + batch_size], y[i:i + batch_size]
+    # define evaluation metrics
+    loss_func = nn.BCELoss()  # binary cross-entropy loss
 
-    train_loader = batch_data(train_x, train_y, batch_size)
+    def custom_eval(model: nn.Module, data_loader: Generator, threshold: float, loss_func: torch.nn):
+        probs = torch.Tensor([])
+        labels = torch.Tensor([])
+        preds = torch.Tensor([])
 
-    def custom_eval(model: nn.Module, x: torch.Tensor, y: torch.Tensor, threshold: float):
-        probs = model(x)
-        preds = (probs > threshold) * 1
+        for x, y in data_loader:
+            probs = torch.cat((probs, model(x)))
+            labels = torch.cat((labels, y))
+        preds = torch.cat((preds, (probs > threshold) * 1))
 
-        tp = ((preds == 1) & (y == 1)).sum().item()
-        fp = ((preds == 1) & (y == 0)).sum().item()
-        fn = ((preds == 0) & (y == 1)).sum().item()
-        tn = ((preds == 0) & (y == 0)).sum().item()
-
-        recall = tp / (tp + fn)
-        precision = tp / (tp + fp)
+        tp = ((preds == 1) & (labels == 1)).sum().item()
+        fp = ((preds == 1) & (labels == 0)).sum().item()
+        fn = ((preds == 0) & (labels == 1)).sum().item()
+        tn = ((preds == 0) & (labels == 0)).sum().item()
+        recall = tp / (tp + fn) if tp else 0
+        precision = tp / (tp + fp) if tp else 0
         f1 = 0.5 * (recall + precision)
+        BCE_loss = loss_func(probs, labels)
+
         return {
             "TP": tp,
             "FP": fp,
@@ -141,16 +153,48 @@ def main():
             "TN": tn,
             "Recall": recall,
             "Precision": precision,
-            "F1-Score": f1
+            "F1-Score": f1,
+            "loss": BCE_loss.item()
         }
 
     if train_model:
+        plt.ion()
+        fig, ax = plt.subplots(3, 3, figsize=(10, 10))
+        plt.tight_layout()
+        eval_metrics = {
+            "train_loss": [],
+            "loss": [],
+            "TP": [],
+            "FP": [],
+            "FN": [],
+            "TN": [],
+            "Recall": [],
+            "Precision": [],
+            "F1-Score": []
+        }
+        lines = []
+        ilines = {}
+        for i, ax_ in enumerate(ax.flatten()):
+            metric = list(eval_metrics)[i]
+            if metric == "train_loss":
+                ax_.set_title(metric)
+            else:
+                ax_.set_title(f"eval_{metric}")
+            if metric in ["TP", "FP", "FN", "TN"]:
+                ax_.set_ylim(0, test_size)
+            else:
+                ax_.set_ylim(0, 1)
+            ax_.set_xlim(0, num_epochs)
+            lines += ax_.plot([], [], 'b-')
+            ilines[metric] = i
+        fig.canvas.draw()
+
         print("-"*50)
         print("training classifier...")
-        loss_func = nn.BCELoss()  # binary cross-entropy loss
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
         for epoch in range(num_epochs):
-            for x, y in train_loader:
+            for x, y in batch_data(train_x, train_y, batch_size):
                 x = x.to(device)
                 y = y.to(device)
                 # forward pass
@@ -167,7 +211,14 @@ def main():
                 torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{epoch}.pth")
 
             if eval_during_training:
-                eval_scores = eval_model(model, test_x, test_y, threshold)
+                test_loader = batch_data(test_x, test_y, batch_size)
+                eval_scores = custom_eval(model, test_loader, threshold, loss_func)
+                eval_scores["train_loss"] = loss.item()
+                for metric in eval_scores:
+                    eval_metrics[metric].append(eval_scores[metric])
+                    lines[ilines[metric]].set_data(range(1, epoch+2), eval_metrics[metric])
+                fig.canvas.draw()
+                plt.pause(0.001)
 
         print("training complete...")
         # save output model
@@ -176,9 +227,9 @@ def main():
     if eval_model:
         print("-"*50)
         print("evaluating classifier... \n")
-
-        for split, texts, labels in (["train", train_x, train_y], ["test", test_x, test_y]):
-            scores = custom_eval(model, texts, labels, threshold)
+        for split, x, y in (["train", train_x, train_y], ["test", test_x, test_y]):
+            batched_data = batch_data(x, y, batch_size)
+            scores = custom_eval(model, batched_data, threshold, loss_func)
             print(f"Evaluation metrics on {split} set:")
             pprint(scores)
 
