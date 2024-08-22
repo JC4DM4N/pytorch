@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from datasets import load_dataset
 import pandas as pd
+from pprint import pprint
 
 from transformer import Encoder
 from tokenisers import SimpleTokeniser
@@ -45,6 +46,7 @@ def main():
     device = torch.device("cpu")
     train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
+    eval_during_training = True             # whether to calculate and save eval metrics at each epoch
 
     # CONFIG - parameters for transformer model
     embed_dim = 256
@@ -118,15 +120,43 @@ def main():
         for i in range(0, len(x), batch_size):
             yield x[i:i + batch_size], y[i:i + batch_size]
 
+    train_loader = batch_data(train_x, train_y, batch_size)
+
+    def custom_eval(model: nn.Module, x: torch.Tensor, y: torch.Tensor, threshold: float):
+        probs = model(x)
+        preds = (probs > threshold) * 1
+
+        tp = ((preds == 1) & (y == 1)).sum().item()
+        fp = ((preds == 1) & (y == 0)).sum().item()
+        fn = ((preds == 0) & (y == 1)).sum().item()
+        tn = ((preds == 0) & (y == 0)).sum().item()
+
+        recall = tp / (tp + fn)
+        precision = tp / (tp + fp)
+        f1 = 0.5 * (recall + precision)
+        return {
+            "TP": tp,
+            "FP": fp,
+            "FN": fn,
+            "TN": tn,
+            "Recall": recall,
+            "Precision": precision,
+            "F1-Score": f1
+        }
+
     if train_model:
         print("-"*50)
         print("training classifier...")
         loss_func = nn.BCELoss()  # binary cross-entropy loss
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         for epoch in range(num_epochs):
-            for x, y in batch_data(train_x, train_y, batch_size):
+            for x, y in train_loader:
+                x = x.to(device)
+                y = y.to(device)
+                # forward pass
                 preds = model(x)
                 loss = loss_func(preds, y)
+                # back propagation
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -135,6 +165,9 @@ def main():
 
             if save_model_every and epoch % save_model_every == 0:
                 torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{epoch}.pth")
+
+            if eval_during_training:
+                eval_scores = eval_model(model, test_x, test_y, threshold)
 
         print("training complete...")
         # save output model
@@ -145,22 +178,9 @@ def main():
         print("evaluating classifier... \n")
 
         for split, texts, labels in (["train", train_x, train_y], ["test", test_x, test_y]):
-
-            probs = model(texts)
-            preds = (probs > threshold)*1
-
-            tp = ((preds == 1) & (labels == 1)).sum().item()
-            fp = ((preds == 1) & (labels == 0)).sum().item()
-            fn = ((preds == 0) & (labels == 1)).sum().item()
-            tn = ((preds == 0) & (labels == 0)).sum().item()
-
-            recall = tp/(tp+fn)
-            precision = tp/(tp+fp)
-            f1 = 0.5*(recall + precision)
-
-            print(f"Evalutation metrics on {split} set:")
-            print(f"TP: {tp}, FP: {fp}, FN: {fn}, TN: {tn}")
-            print(f"Recall: {recall}, Precision: {precision}, F1-Score: {f1} \n")
+            scores = custom_eval(model, texts, labels, threshold)
+            print(f"Evaluation metrics on {split} set:")
+            pprint(scores)
 
 
 if __name__ == "__main__":
