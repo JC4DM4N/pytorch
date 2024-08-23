@@ -40,17 +40,17 @@ def main():
     # CONFIG - training
     MODEL_NAME = "bert_classifier"          # prefix for model files
     MODEL_OUTPUT_PATH = "bert_classifier"   # path of directory to save model files
-    num_epochs = 50                        # training epochs
+    num_epochs = 50                         # training epochs
     batch_size = 64                         # batch size
     learning_rate = 1e-4                    # learning rate
     save_model_every = 10                   # no. epochs to save model weights file
-    load_epoch = 40                          # file index to load
+    load_epoch = 0                          # file index to load
     device = torch.device("cpu")
-    train_model = False                      # boolean to perform training
+    train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
     eval_during_training = True             # whether to calculate and save eval metrics at each epoch
-    train_size = 2500                       # sample size of training data to use
-    test_size = 2500                        # sample size of test data to use
+    train_size = 1000                       # sample size of training data to use
+    test_size = 1000                        # sample size of test data to use
 
     # CONFIG - parameters for transformer model
     embed_dim = 256
@@ -220,7 +220,7 @@ def main():
                 eval_scores["train_loss"] = loss.item()
                 for metric in eval_scores:
                     eval_metrics[metric].append(eval_scores[metric])
-                    lines[ilines[metric]].set_data(range(1, epoch+2), eval_metrics[metric])
+                    lines[ilines[metric]].set_data(range(1, epoch+1), eval_metrics[metric])
                 fig.canvas.draw()
                 plt.tight_layout()
                 plt.pause(0.001)
@@ -228,6 +228,9 @@ def main():
         print("training complete...")
         # save output model
         torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}.pth")
+        # save training logs
+        plt.savefig(f"{MODEL_OUTPUT_PATH}/training_logs.png")
+
 
     if eval_model:
         print("-"*50)
