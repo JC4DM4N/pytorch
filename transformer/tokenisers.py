@@ -30,7 +30,7 @@ class SimpleTokeniser:
         all_tokens = []
         for x in xs:
             all_tokens += list(self.get_tokens(x))
-        return np.array(list(set(all_tokens)) + special_chars)
+        return np.array(sorted(list(set(all_tokens))) + special_chars)
 
     @staticmethod
     def get_tokens(x: str) -> np.array:

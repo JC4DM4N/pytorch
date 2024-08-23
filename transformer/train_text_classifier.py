@@ -49,8 +49,8 @@ def main():
     train_model = False                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
     eval_during_training = True             # whether to calculate and save eval metrics at each epoch
-    train_size = 1000                       # sample size of training data to use
-    test_size = 1000                        # sample size of test data to use
+    train_size = 2500                       # sample size of training data to use
+    test_size = 2500                        # sample size of test data to use
 
     # CONFIG - parameters for transformer model
     embed_dim = 256
@@ -97,6 +97,10 @@ def main():
     test_tokens = test_df["text"].apply(tokeniser)
     test_x = torch.stack(test_tokens.to_list())
     test_y = torch.tensor(test_df["label"].astype(float).to_list()).view(test_df.shape[0], 1)
+
+    print(tokeniser.tokens_to_idx["and"])
+    print(tokeniser.tokens_to_idx["movie"])
+    print(tokeniser.tokens_to_idx["funny"])
 
     def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
         """Yield successive n-sized chunks from lst."""
@@ -160,7 +164,6 @@ def main():
     if train_model:
         plt.ion()
         fig, ax = plt.subplots(3, 3, figsize=(10, 10))
-        plt.tight_layout()
         eval_metrics = {
             "train_loss": [],
             "loss": [],
@@ -184,6 +187,7 @@ def main():
                 ax_.set_ylim(0, test_size)
             else:
                 ax_.set_ylim(0, 1)
+            ax_.set_xlabel("epoch")
             ax_.set_xlim(0, num_epochs)
             lines += ax_.plot([], [], 'b-')
             ilines[metric] = i
@@ -193,7 +197,7 @@ def main():
         print("training classifier...")
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        for epoch in range(num_epochs):
+        for epoch in range(1, num_epochs+1):
             for x, y in batch_data(train_x, train_y, batch_size):
                 x = x.to(device)
                 y = y.to(device)
@@ -218,6 +222,7 @@ def main():
                     eval_metrics[metric].append(eval_scores[metric])
                     lines[ilines[metric]].set_data(range(1, epoch+2), eval_metrics[metric])
                 fig.canvas.draw()
+                plt.tight_layout()
                 plt.pause(0.001)
 
         print("training complete...")
@@ -232,6 +237,7 @@ def main():
             scores = custom_eval(model, batched_data, threshold, loss_func)
             print(f"Evaluation metrics on {split} set:")
             pprint(scores)
+            print("\n")
 
 
 if __name__ == "__main__":
