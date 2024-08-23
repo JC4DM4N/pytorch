@@ -113,14 +113,14 @@ class TransformerBlock(nn.Module):
     def forward(self, query, key, value, mask=None):
         # multi-head layer
         attention_out = self.multi_head(query, key, value, mask)
-        dropout1_out = self.dropout1(attention_out)
-        attention_out_residual = dropout1_out + query  # residual connection for first layer
+        attention_out_residual = attention_out + query  # residual connection for first layer
         norm1_out = self.norm1(attention_out_residual)
+        dropout1_out = self.dropout1(norm1_out)
         # fc layers
-        fc1_out = self.dropout2(F.relu(self.fc1(norm1_out)))
+        fc1_out = F.relu(self.fc1(norm1_out))
         fc2_out = self.fc2(fc1_out)
         fc_out_redidual = fc2_out + norm1_out  # residual connection for second layer
-        out = self.norm2(fc_out_redidual)
+        out = self.dropout2(self.norm2(fc_out_redidual))
         return out
 
 
@@ -149,9 +149,9 @@ class DecoderBlock(nn.Module):
 
     def forward(self, query, key, value, mask=None):
         attention_out = self.multi_head(query, key, value, mask)
-        attention_norm = self.norm1(attention_out)
-        query = self.dropout(attention_norm) + query  # residual connection
-        out = self.transformer_block(query, key, value, mask)
+        attention_out_residual = self.norm1(attention_out + query)  # residual connection
+        dropout_out = self.dropout(attention_out_residual)
+        out = self.transformer_block(dropout_out, key, value, mask)
         return out
 
 
