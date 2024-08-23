@@ -38,7 +38,7 @@ class PositionalEncoding(nn.Module):
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(self, heads: int = 8, embed_dim: int = 512):
+    def __init__(self, heads: int = 8, embed_dim: int = 512, dropout: float = 0.2):
         super(MultiHeadedAttention, self).__init__()
         assert embed_dim % heads == 0, "Embedding size must be divisible by number of heads"
         self.d_k = embed_dim // heads               # single head dimension
@@ -47,6 +47,8 @@ class MultiHeadedAttention(nn.Module):
         self.query = nn.Linear(embed_dim, embed_dim)  # query vector - bias addition included
         self.key = nn.Linear(embed_dim, embed_dim)    # key vector - bias addition included
         self.value = nn.Linear(embed_dim, embed_dim)  # value vector - bias addition included
+
+        self.dropout = nn.Dropout(dropout)
 
         self.out = nn.Linear(self.d_k*self.heads, embed_dim)
 
@@ -87,6 +89,9 @@ class MultiHeadedAttention(nn.Module):
         # apply softmax
         attention_scores = F.softmax(attention_scores, dim=-1)
 
+        # include dropout
+        attention_scores = self.dropout(attention_scores)
+
         # multiply by value to get context (batch_size, heads, max_len, d_k)
         context = torch.matmul(attention_scores, value)
 
@@ -100,15 +105,15 @@ class MultiHeadedAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, embed_dim: int, heads: int):
+    def __init__(self, embed_dim: int, heads: int, dropout: float = 0.2):
         super(TransformerBlock, self).__init__()
         self.multi_head = MultiHeadedAttention(heads, embed_dim)
-        self.dropout1 = nn.Dropout(0.2)
+        self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.fc1 = nn.Linear(embed_dim, embed_dim*4)
         self.fc2 = nn.Linear(embed_dim*4, embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
-        self.dropout2 = nn.Dropout(0.2)
+        self.dropout2 = nn.Dropout(dropout)
 
     def forward(self, query, key, value, mask=None):
         # multi-head layer
@@ -117,20 +122,21 @@ class TransformerBlock(nn.Module):
         norm1_out = self.norm1(attention_out_residual)
         dropout1_out = self.dropout1(norm1_out)
         # fc layers
-        fc1_out = F.relu(self.fc1(norm1_out))
+        fc1_out = F.relu(self.fc1(dropout1_out))
         fc2_out = self.fc2(fc1_out)
         fc_out_redidual = fc2_out + norm1_out  # residual connection for second layer
-        out = self.dropout2(self.norm2(fc_out_redidual))
-        return out
+        norm2_out = self.norm2(fc_out_redidual)
+        dropout2_out = self.self.dropout2(norm2_out)
+        return dropout2_out
 
 
 class Encoder(nn.Module):
 
-    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int):
+    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, dropout: float = 0.2):
         super(Encoder, self).__init__()
         self.embedding = Embedding(vocab_size, embed_dim)
         self.positional_encoding = PositionalEncoding(embed_dim, max_len)
-        self.layers = nn.ModuleList([TransformerBlock(embed_dim, heads) for _ in range(num_layers)])
+        self.layers = nn.ModuleList([TransformerBlock(embed_dim, heads, dropout) for _ in range(num_layers)])
 
     def forward(self, x):
         x = self.embedding(x) + self.positional_encoding(x)
@@ -140,11 +146,11 @@ class Encoder(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, heads: int, embed_dim: int):
+    def __init__(self, heads: int, embed_dim: int, dropout: float = 0.2):
         super(DecoderBlock, self).__init__()
         self.multi_head = MultiHeadedAttention(heads, embed_dim)
         self.norm1 = nn.LayerNorm(embed_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(dropout)
         self.transformer_block = TransformerBlock(embed_dim, heads)
 
     def forward(self, query, key, value, mask=None):
@@ -156,18 +162,18 @@ class DecoderBlock(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int):
+    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int, dropout: float = 0.2):
         super(Decoder, self).__init__()
         self.embedding = Embedding(vocab_size, embed_dim)
         self.positional_encoding = PositionalEncoding(embed_dim, max_len)
         self.layers = nn.ModuleList(
             [
-                DecoderBlock(heads, embed_dim)
+                DecoderBlock(heads, embed_dim, dropout)
                 for _ in range(num_layers)
             ]
         )
         self.fc = nn.Linear(embed_dim, output_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, enc_out, mask=None):
         x = self.embedding(x) + self.positional_encoding(x)
@@ -179,11 +185,11 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, src_vocab_size: int, tgt_vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int):
+    def __init__(self, src_vocab_size: int, tgt_vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, output_dim: int, dropout: float = 0.2):
         super(Transformer, self).__init__()
 
-        self.encoder = Encoder(src_vocab_size, embed_dim, max_len, num_layers, heads)
-        self.decoder = Decoder(tgt_vocab_size, embed_dim, max_len, num_layers, heads, output_dim)
+        self.encoder = Encoder(src_vocab_size, embed_dim, max_len, num_layers, heads, dropout)
+        self.decoder = Decoder(tgt_vocab_size, embed_dim, max_len, num_layers, heads, output_dim, dropout)
 
     def make_tgt_mask(self, tgt: torch.Tensor):
         """

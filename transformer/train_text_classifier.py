@@ -14,20 +14,22 @@ from tokenisers import SimpleTokeniser
 
 class BERTClassifier(nn.Module):
 
-    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, num_classes: int):
+    def __init__(self, vocab_size: int, embed_dim: int, max_len: int, num_layers: int, heads: int, num_classes: int, dropout: float):
         super(BERTClassifier, self).__init__()
         self.encoder = Encoder(
             vocab_size=vocab_size,
             embed_dim=embed_dim,
             max_len=max_len,
             num_layers=num_layers,
-            heads=heads
+            heads=heads,
+            dropout=dropout
         )
         # classifier layers
         self.fc = nn.Linear(embed_dim, num_classes)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor):
-        x = self.encoder(x)
+        x = self.dropout(self.encoder(x))
         # average pooling of embeddings over full sequence -
         # Note BERT uses [CLS] embedding as a representation of the full sentence
         # but we haven't accounted for that here.
@@ -43,13 +45,14 @@ def main():
     num_epochs = 50                         # training epochs
     batch_size = 64                         # batch size
     learning_rate = 1e-4                    # learning rate
+    dropout = 0.2                           # global dropout used across all modules
     save_model_every = 10                   # no. epochs to save model weights file
     load_epoch = 0                          # file index to load
     device = torch.device("cpu")
     train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
     eval_during_training = True             # whether to calculate and save eval metrics at each epoch
-    train_size = 1000                       # sample size of training data to use
+    train_size = 10000                       # sample size of training data to use
     test_size = 1000                        # sample size of test data to use
 
     # CONFIG - parameters for transformer model
@@ -86,6 +89,7 @@ def main():
     print(f"learning_rate: {learning_rate}")
     print(f"num_epochs: {num_epochs}")
     print(f"batch_size: {batch_size}")
+    print(f"dropout: {dropout}")
 
     # tokenise texts
     print("-"*50)
@@ -120,7 +124,8 @@ def main():
         max_len=max_len,
         num_layers=num_layers,
         heads=heads,
-        num_classes=output_dim
+        num_classes=output_dim,
+        dropout=dropout
     )
     # load saved model
     if load_epoch:
