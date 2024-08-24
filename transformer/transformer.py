@@ -126,7 +126,7 @@ class TransformerBlock(nn.Module):
         fc2_out = self.fc2(fc1_out)
         fc_out_redidual = fc2_out + norm1_out  # residual connection for second layer
         norm2_out = self.norm2(fc_out_redidual)
-        dropout2_out = self.self.dropout2(norm2_out)
+        dropout2_out = self.dropout2(norm2_out)
         return dropout2_out
 
 

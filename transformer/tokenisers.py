@@ -26,7 +26,7 @@ class SimpleTokeniser:
         return torch.tensor(itokens)
 
     def get_vocab(self, xs: List[str]) -> np.array:
-        special_chars = ["[CLS]", "[SEP]", "[UNK]", "[PAD]"]
+        special_chars = ["[CLS]", "[SEP]", "[UNK]", "[PAD]", "[MASK]"]
         all_tokens = []
         for x in xs:
             all_tokens += list(self.get_tokens(x))

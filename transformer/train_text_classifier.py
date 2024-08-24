@@ -29,11 +29,12 @@ class BERTClassifier(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor):
-        x = self.dropout(self.encoder(x))
+        x = self.encoder(x)
         # average pooling of embeddings over full sequence -
         # Note BERT uses [CLS] embedding as a representation of the full sentence
         # but we haven't accounted for that here.
         x = x.mean(dim=1)
+        x = self.dropout(x)
         x = F.sigmoid(self.fc(x))
         return x
 
@@ -42,10 +43,10 @@ def main():
     # CONFIG - training
     MODEL_NAME = "bert_classifier"          # prefix for model files
     MODEL_OUTPUT_PATH = "bert_classifier"   # path of directory to save model files
-    num_epochs = 50                         # training epochs
+    num_epochs = 150                         # training epochs
     batch_size = 64                         # batch size
-    learning_rate = 1e-4                    # learning rate
-    dropout = 0.2                           # global dropout used across all modules
+    learning_rate = 1e-5                    # learning rate
+    dropout = 0.25                          # global dropout used across all modules
     save_model_every = 10                   # no. epochs to save model weights file
     load_epoch = 0                          # file index to load
     device = torch.device("cpu")
@@ -101,10 +102,6 @@ def main():
     test_tokens = test_df["text"].apply(tokeniser)
     test_x = torch.stack(test_tokens.to_list())
     test_y = torch.tensor(test_df["label"].astype(float).to_list()).view(test_df.shape[0], 1)
-
-    print(tokeniser.tokens_to_idx["and"])
-    print(tokeniser.tokens_to_idx["movie"])
-    print(tokeniser.tokens_to_idx["funny"])
 
     def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
         """Yield successive n-sized chunks from lst."""
