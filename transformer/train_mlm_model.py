@@ -29,15 +29,15 @@ class MaskedLanguageModel(nn.Module):
         self.fc = nn.Linear(embed_dim, vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor):
         x = self.encoder(x)
-        # average pooling of embeddings over full sequence -
-        # Note BERT uses [CLS] embedding as a representation of the full sentence
-        # but we haven't accounted for that here.
-        x = x.mean(dim=1)
-        x = self.dropout(x)
-        x = F.softmax(self.fc(x), dim=-1)
-        return x
+        # Select only the embeddings of the masked positions
+        masked_positions = mask.unsqueeze(-1).expand_as(x)  # shape (batch_size, seq_len, embed_dim)
+        x_masked = x[masked_positions].view(-1, x.size(-1))  # shape (num_masked_tokens, embed_dim)
+
+        logits = self.fc(x_masked)
+        # probs = F.softmax(logits, dim=-1)
+        return logits
 
 
 def main():
@@ -46,16 +46,16 @@ def main():
     MODEL_OUTPUT_PATH = "mlm_model"         # path of directory to save model files
     num_epochs = 50                         # training epochs
     batch_size = 64                         # batch size
-    learning_rate = 1e-5                    # learning rate
-    dropout = 0.25                          # global dropout used across all modules
+    learning_rate = 1e-4                    # learning rate
+    dropout = 0.2                           # global dropout used across all modules
     save_model_every = 10                   # no. epochs to save model weights file
     load_epoch = 0                          # file index to load
     device = torch.device("cpu")
     train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
     eval_during_training = True             # whether to calculate and save eval metrics at each epoch
-    train_size = 1000                       # sample size of training data to use
-    test_size = 100                         # sample size of test data to use
+    train_size = 10000                      # sample size of training data to use
+    test_size = 1000                        # sample size of test data to use
 
     # CONFIG - parameters for transformer model
     embed_dim = 256
@@ -64,11 +64,11 @@ def main():
     heads = 1
     threshold = 0.5                         # probability threshold for assigning labels
 
-    # load dataset from datasets and take a sample
-    data = load_dataset("stanfordnlp/imdb")
-
-    train_df = pd.DataFrame(data["train"]).sample(train_size, random_state=1)
-    test_df = pd.DataFrame(data["test"]).sample(test_size, random_state=1)
+    print("loading data...")
+    # load dataset from datasets and take a sample - TinyStories data:
+    # https://www.kaggle.com/datasets/thedevastator/tinystories-narrative-classification?resource=download
+    train_df = pd.read_csv("archive_small/train.csv").dropna().sample(train_size, random_state=1)
+    test_df = pd.read_csv("archive_small/train.csv").dropna().sample(test_size, random_state=1)
 
     # train tokeniser using vocabulary in the train set only
     tokeniser = SimpleTokeniser(max_len, train_df["text"])
@@ -102,29 +102,27 @@ def main():
         ]
         mask_token_id = tokeniser.tokens_to_idx["[MASK]"]
         for _ in range(repeats):
-            for tokens in all_tokens:
+            for tokens_ in all_tokens:
+                masked_tokens = tokens_.detach().clone()
                 replaced_token = unwanted_token_ids[0]
                 while replaced_token in unwanted_token_ids:
                     imask = np.random.randint(max_len)
-                    replaced_token = tokens[imask].item()
-                tokens[imask] = mask_token_id
-                masked_tokens_x.append(tokens)
-                one_hot = np.zeros(len(tokeniser.vocab))
-                one_hot[replaced_token] = 1.
-                masked_tokens_y.append(torch.tensor(one_hot))
+                    replaced_token = tokens_[imask].item()
+                masked_tokens[imask] = mask_token_id
+                masked_tokens_x.append(masked_tokens)
+                masked_tokens_y.append(tokens_[imask])
         return torch.stack(masked_tokens_x), torch.stack(masked_tokens_y)
 
     train_tokens = train_df["text"].apply(tokeniser)
-    train_x, train_y = prepare_masked_texts(train_tokens)
+    train_tokens = torch.stack(train_tokens.to_list())
 
     test_tokens = test_df["text"].apply(tokeniser)
-    test_x, test_y = prepare_masked_texts(test_tokens)
+    test_tokens = torch.stack(test_tokens.to_list())
 
-    def batch_data(x: torch.Tensor, y: torch.Tensor, batch_size: int):
+    def batch_data(x: torch.Tensor, batch_size: int):
         """Yield successive n-sized chunks from lst."""
-        assert x.shape[0] == y.shape[0]
         for i in range(0, len(x), batch_size):
-            yield x[i:i + batch_size], y[i:i + batch_size]
+            yield x[i:i + batch_size]
 
     if not os.path.exists(MODEL_OUTPUT_PATH):
         os.mkdir(MODEL_OUTPUT_PATH)
@@ -152,6 +150,7 @@ def main():
     def custom_eval():
         pass
 
+    import time
     if train_model:
         plt.ion()
         fig, ax = plt.subplots(2, 1, figsize=(5, 5))
@@ -164,23 +163,26 @@ def main():
         for i, ax_ in enumerate(ax.flatten()):
             metric = list(eval_metrics)[i]
             ax_.set_title(metric)
-            ax_.set_ylim(0, 1)
+            ax_.set_ylim(0, 10)
             ax_.set_xlabel("epoch")
-            ax_.set_xlim(0, num_epochs)
+            ax_.set_xlim(load_epoch+1, load_epoch+num_epochs+1)
             lines += ax_.plot([], [], 'b-')
             ilines[metric] = i
         fig.canvas.draw()
 
         print("-"*50)
         print("training classifier...")
+        tstart = time.time()
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        for epoch in range(1, num_epochs+1):
-            for x, y in batch_data(train_x, train_y, batch_size):
+        for epoch in range(load_epoch+1, load_epoch+num_epochs+1):
+            for input_tokens in batch_data(train_tokens.detach().clone(), batch_size):
+                x, y = prepare_masked_texts(input_tokens)
                 x = x.to(device)
                 y = y.to(device)
+                mask = x == tokeniser.tokens_to_idx["[MASK]"]
                 # forward pass
-                preds = model(x)
+                preds = model(x, mask)
                 loss = loss_func(preds, y)
                 # back propagation
                 optimizer.zero_grad()
@@ -196,21 +198,24 @@ def main():
                 eval_metrics["train_loss"].append(loss.item())
                 eval_preds = torch.tensor([])
                 eval_labels = torch.tensor([])
-                for x, y in batch_data(test_x, test_y, batch_size):
+                for input_tokens in batch_data(test_tokens.detach().clone(), batch_size):
+                    x, y = prepare_masked_texts(input_tokens)
                     x = x.to(device)
                     y = y.to(device)
+                    mask = x == tokeniser.tokens_to_idx["[MASK]"]
                     # forward pass
-                    eval_preds = torch.cat((eval_preds, model(x)))
+                    eval_preds = torch.cat((eval_preds, model(x, mask)))
                     eval_labels = torch.cat((eval_labels, y))
-                eval_loss = loss_func(eval_preds, eval_labels)
+                eval_loss = loss_func(eval_preds, eval_labels.to(int))
                 eval_metrics["eval_loss"].append(eval_loss.item())
                 for metric in eval_metrics:
-                    lines[ilines[metric]].set_data(range(1, epoch+1), eval_metrics[metric])
+                    lines[ilines[metric]].set_data(range(load_epoch+1, epoch+1), eval_metrics[metric])
                 fig.canvas.draw()
                 plt.tight_layout()
                 plt.pause(0.001)
 
         print("training complete...")
+        print(f"training time: {time.time() - tstart}")
         # save output model
         torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}.pth")
         # save training logs
@@ -219,17 +224,19 @@ def main():
     if eval_model:
         print("-"*50)
         print("evaluating classifier... \n")
-        for split, x, y in (["train", train_x, train_y], ["test", test_x, test_y]):
+        for split, x in (["train", train_tokens], ["test", test_tokens]):
             eval_metrics = {}
             preds = torch.tensor([])
             labels = torch.tensor([])
-            for x_, y_ in batch_data(x, y, batch_size):
-                x_ = x_.to(device)
-                y_ = y_.to(device)
+            for input_tokens in batch_data(x.detach().clone(), batch_size):
+                x, y = prepare_masked_texts(input_tokens)
+                x = x.to(device)
+                y = y.to(device)
+                mask = x == tokeniser.tokens_to_idx["[MASK]"]
                 # forward pass
-                preds = torch.cat((preds, model(x_)))
-                labels = torch.cat((labels, y_))
-            loss = loss_func(preds, labels)
+                preds = torch.cat((preds, model(x, mask)))
+                labels = torch.cat((labels, y))
+            loss = loss_func(preds, labels.to(int))
             eval_metrics[f"cross_entropy_loss"] = loss.item()
             print(f"Evaluation metrics on {split} set:")
             pprint(eval_metrics)
