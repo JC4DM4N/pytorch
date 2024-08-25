@@ -22,7 +22,7 @@ class SimpleTokeniser:
         padding = ["[PAD]"]*(self.max_len - len(tokens))
         tokens = np.concatenate((tokens, padding))
         # convert to integer values
-        itokens = self.convert_tokens_to_idx(tokens)
+        itokens = self.encode(tokens)
         return torch.tensor(itokens)
 
     def get_vocab(self, xs: List[str]) -> np.array:
@@ -46,12 +46,12 @@ class SimpleTokeniser:
     def _idx_to_tokens(self) -> Dict[str, int]:
         return {i: token for i, token in enumerate(self.vocab)}
 
-    def convert_tokens_to_idx(self, tokens: List[str]) -> List[int]:
+    def encode(self, tokens: List[str]) -> List[int]:
         return [
             self.tokens_to_idx[token]
             if token in self.tokens_to_idx else self.tokens_to_idx["[UNK]"]
             for token in tokens
         ]
 
-    def convert_idx_to_tokens(self, itokens: List[int]) -> List[str]:
-        return [self.idx_to_tokens[itoken] for itoken in itokens]
+    def decode(self, tokens_idx: List[int]) -> List[str]:
+        return [self.idx_to_tokens[token_idx] for token_idx in tokens_idx]
