@@ -1,12 +1,10 @@
 import os
 import torch
 from torch import nn
-import torch.nn.functional as F
-from datasets import load_dataset
 import pandas as pd
 import numpy as np
 from pprint import pprint
-from typing import Generator
+
 import matplotlib.pyplot as plt
 
 from transformer import Encoder
@@ -34,9 +32,7 @@ class MaskedLanguageModel(nn.Module):
         # Select only the embeddings of the masked positions
         masked_positions = mask.unsqueeze(-1).expand_as(x)  # shape (batch_size, seq_len, embed_dim)
         x_masked = x[masked_positions].view(-1, x.size(-1))  # shape (num_masked_tokens, embed_dim)
-
         logits = self.fc(x_masked)
-        # probs = F.softmax(logits, dim=-1)
         return logits
 
 
@@ -44,12 +40,12 @@ def main():
     # CONFIG - training
     MODEL_NAME = "mlm_model"                # prefix for model files
     MODEL_OUTPUT_PATH = "mlm_model"         # path of directory to save model files
-    num_epochs = 50                         # training epochs
+    num_epochs = 200                        # training epochs
     batch_size = 64                         # batch size
     learning_rate = 1e-4                    # learning rate
     dropout = 0.2                           # global dropout used across all modules
     save_model_every = 10                   # no. epochs to save model weights file
-    load_epoch = 0                          # file index to load
+    load_epoch = 50                         # file index to load
     device = torch.device("cpu")
     train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
@@ -150,10 +146,19 @@ def main():
     def custom_eval():
         pass
 
+    def forward_pass(tokens: torch.tensor):
+        x, y = prepare_masked_texts(tokens)
+        x = x.to(device)
+        y = y.to(device)
+        mask = x == tokeniser.tokens_to_idx["[MASK]"]
+        # forward pass
+        preds = model(x, mask)
+        return y, preds
+
     import time
     if train_model:
         plt.ion()
-        fig, ax = plt.subplots(2, 1, figsize=(5, 5))
+        fig, ax = plt.subplots(2, 1, figsize=(5, 8))
         eval_metrics = {
             "train_loss": [],
             "eval_loss": [],
@@ -177,19 +182,15 @@ def main():
 
         for epoch in range(load_epoch+1, load_epoch+num_epochs+1):
             for input_tokens in batch_data(train_tokens.detach().clone(), batch_size):
-                x, y = prepare_masked_texts(input_tokens)
-                x = x.to(device)
-                y = y.to(device)
-                mask = x == tokeniser.tokens_to_idx["[MASK]"]
                 # forward pass
-                preds = model(x, mask)
+                y, preds = forward_pass(input_tokens)
                 loss = loss_func(preds, y)
                 # back propagation
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-            print(f"Epoch: {epoch+1}, Loss: {loss.item()}")
+            print(f"Epoch: {epoch}, Loss: {loss.item()}")
 
             if save_model_every and epoch % save_model_every == 0:
                 torch.save(model.state_dict(), f"{MODEL_OUTPUT_PATH}/{MODEL_NAME}_epoch_{epoch}.pth")
@@ -199,17 +200,14 @@ def main():
                 eval_preds = torch.tensor([])
                 eval_labels = torch.tensor([])
                 for input_tokens in batch_data(test_tokens.detach().clone(), batch_size):
-                    x, y = prepare_masked_texts(input_tokens)
-                    x = x.to(device)
-                    y = y.to(device)
-                    mask = x == tokeniser.tokens_to_idx["[MASK]"]
                     # forward pass
-                    eval_preds = torch.cat((eval_preds, model(x, mask)))
+                    y, preds = forward_pass(input_tokens)
+                    eval_preds = torch.cat((eval_preds, preds))
                     eval_labels = torch.cat((eval_labels, y))
                 eval_loss = loss_func(eval_preds, eval_labels.to(int))
                 eval_metrics["eval_loss"].append(eval_loss.item())
                 for metric in eval_metrics:
-                    lines[ilines[metric]].set_data(range(load_epoch+1, epoch+1), eval_metrics[metric])
+                    lines[ilines[metric]].set_data(range(load_epoch, epoch), eval_metrics[metric])
                 fig.canvas.draw()
                 plt.tight_layout()
                 plt.pause(0.001)
@@ -226,17 +224,14 @@ def main():
         print("evaluating classifier... \n")
         for split, x in (["train", train_tokens], ["test", test_tokens]):
             eval_metrics = {}
-            preds = torch.tensor([])
-            labels = torch.tensor([])
+            all_preds = torch.tensor([])
+            all_labels = torch.tensor([])
             for input_tokens in batch_data(x.detach().clone(), batch_size):
-                x, y = prepare_masked_texts(input_tokens)
-                x = x.to(device)
-                y = y.to(device)
-                mask = x == tokeniser.tokens_to_idx["[MASK]"]
                 # forward pass
-                preds = torch.cat((preds, model(x, mask)))
-                labels = torch.cat((labels, y))
-            loss = loss_func(preds, labels.to(int))
+                y, preds = forward_pass(input_tokens)
+                all_preds = torch.cat((all_preds, preds))
+                all_labels = torch.cat((all_labels, y))
+            loss = loss_func(all_preds, all_labels.to(int))
             eval_metrics[f"cross_entropy_loss"] = loss.item()
             print(f"Evaluation metrics on {split} set:")
             pprint(eval_metrics)
