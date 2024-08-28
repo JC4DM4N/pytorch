@@ -1,6 +1,7 @@
 import os
 import torch
 from torch import nn
+import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 from pprint import pprint
@@ -42,10 +43,10 @@ def main():
     MODEL_OUTPUT_PATH = "mlm_model"         # path of directory to save model files
     num_epochs = 200                        # training epochs
     batch_size = 64                         # batch size
-    learning_rate = 1e-4                    # learning rate
+    learning_rate = 1e-5                    # learning rate
     dropout = 0.2                           # global dropout used across all modules
     save_model_every = 10                   # no. epochs to save model weights file
-    load_epoch = 50                         # file index to load
+    load_epoch = 750                        # file index to load
     device = torch.device("cpu")
     train_model = True                      # boolean to perform training
     eval_model = True                       # boolean to perform evaluation
@@ -143,8 +144,11 @@ def main():
     # define evaluation metrics
     loss_func = nn.CrossEntropyLoss()  # cross-entropy loss
 
-    def custom_eval():
-        pass
+    def custom_eval(preds: torch.tensor, labels: torch.tensor):
+        probs = F.softmax(preds, dim=-1)
+        correct_probs = [prob[int(label)].item() for prob, label in zip(probs, labels)]
+        average_correct_prob = np.mean(correct_probs)
+        return {"average_correct_prob": average_correct_prob}
 
     def forward_pass(tokens: torch.tensor):
         x, y = prepare_masked_texts(tokens)
@@ -158,17 +162,21 @@ def main():
     import time
     if train_model:
         plt.ion()
-        fig, ax = plt.subplots(2, 1, figsize=(5, 8))
+        fig, ax = plt.subplots(1, 3, figsize=(12, 4))
         eval_metrics = {
             "train_loss": [],
             "eval_loss": [],
+            "average_correct_prob": []
         }
         lines = []
         ilines = {}
         for i, ax_ in enumerate(ax.flatten()):
             metric = list(eval_metrics)[i]
             ax_.set_title(metric)
-            ax_.set_ylim(0, 10)
+            if metric == "average_correct_prob":
+                ax_.set_ylim(0, 1)
+            else:
+                ax_.set_ylim(0, 10)
             ax_.set_xlabel("epoch")
             ax_.set_xlim(load_epoch+1, load_epoch+num_epochs+1)
             lines += ax_.plot([], [], 'b-')
@@ -206,6 +214,8 @@ def main():
                     eval_labels = torch.cat((eval_labels, y))
                 eval_loss = loss_func(eval_preds, eval_labels.to(int))
                 eval_metrics["eval_loss"].append(eval_loss.item())
+                custom_metrics = custom_eval(eval_preds, eval_labels)
+                eval_metrics["average_correct_prob"].append(custom_metrics["average_correct_prob"])
                 for metric in eval_metrics:
                     lines[ilines[metric]].set_data(range(load_epoch, epoch), eval_metrics[metric])
                 fig.canvas.draw()
@@ -233,6 +243,10 @@ def main():
                 all_labels = torch.cat((all_labels, y))
             loss = loss_func(all_preds, all_labels.to(int))
             eval_metrics[f"cross_entropy_loss"] = loss.item()
+
+            custom_metrics = custom_eval(all_preds, all_labels)
+            eval_metrics.update(custom_metrics)
+
             print(f"Evaluation metrics on {split} set:")
             pprint(eval_metrics)
             print("\n")
